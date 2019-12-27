@@ -39,13 +39,107 @@ type
         Close
         Read
 
-    ReaderActuator* = proc(action: WriterAction; data: pointer; data_len: int; written_len: var int) {.closure.}
+    ReaderActuator* = proc(action: ReaderAction; data: pointer; data_len: int; read_len: var int) {.closure.}
 
     CborWriter* = object
         actuator*: WriterActuator
 
+    BoxedValue* = object
+        kind*: FieldMajorKind
+        kind2*: PrimitiveKind
+        kind3*: SimpleValueKind
+        data*: array[8, uint8]
+
     CborReader* = object
         actuator*: ReaderActuator
+
+# Deals with boxed values.
+# =======================================================================
+
+proc unbox*(self: BoxedValue; value: var float64; default: float64; lossy: bool): bool {.discardable.} =
+    result = true
+    case self.kind:
+    of Primitive:
+        case self.kind2:
+        of Float:
+            var x: float32
+            copymem(addr x, unsafeAddr self.data[0], float64.sizeof)
+            value = x.float64
+        of Double:
+            copymem(addr value, unsafeAddr self.data[0], float64.sizeof)
+        else:
+            value = default
+            result = false
+    else:
+        value = default
+        result = false
+
+proc unbox*(self: BoxedValue; value: var bool; default: bool; lossy: bool): bool {.discardable.} =
+    result = true
+    case self.kind:
+    of Primitive:
+        case self.kind2
+        of SimpleValueByte:
+          case self.kind3:
+            of True:
+                value = true
+            of False:
+                value = false
+            of Null, Undefined:
+                if lossy:
+                    value = false
+                else:
+                    value = default
+                    result = false
+        else:
+            value = default
+            result = false
+    else:
+        value = default
+        result = false
+
+proc unbox*(self: BoxedValue; value: var uint64; default: uint64; lossy: bool): bool {.discardable.} =
+    result = true
+    case self.kind:
+    of PositiveInteger:
+        copymem(addr value, unsafeAddr self.data[0], uint64.sizeof)
+    of NegativeInteger:
+        if lossy:
+            value = 0'u
+        else:
+            value = default
+            result = false
+    else:
+        value = default
+        result = false
+
+proc unbox*(self: BoxedValue; value: var int64; default: int64; lossy: bool): bool {.discardable.} =
+    result = true
+    var x: uint64
+    case self.kind:
+    of NegativeInteger:
+        copymem(addr x, unsafeAddr self.data[0], uint64.sizeof)
+        if x <= int64.high.uint64:
+            value = (x.int64 * -1)
+        else:
+            if lossy:
+                value = int64.low
+            else:
+                value = default
+                result = false
+    of PositiveInteger:
+        copymem(addr x, unsafeAddr self.data[0], uint64.sizeof)
+        if x <= int64.high.uint64:
+            value = x.int64
+        else:
+            if lossy:
+                value = int64.high
+            else:
+                value = default
+                result = false
+    else:
+        value = default
+        result = false
 
 # These just commad and control the writer object, which pawns all the
 # work off on a closure.
@@ -67,6 +161,31 @@ proc flush*(self: var CborWriter) =
     ## it may very well do nothing at all.
     if self.actuator != nil:
         self.actuator(WriterAction.Flush, nil, 0)
+
+# These just command and control the reader object, which pawns all the
+# work off on a closure.
+# =======================================================================
+
+proc get*(self: var CborReader; data: pointer; data_len: int): bool {.inline.} =
+    ## Attempts to read some data from the underlying stream. Returns
+    ## whether the data could be read.
+    ##
+    ## We expect to retrieve the entirety of data we have asked for.
+    ## Otherwise no data from this call is consumed and it is up to the
+    ## caller whether to abort or wait for the rest of the data to come
+    ## through.
+    if self.actuator != nil:
+        var actually: int
+        self.actuator(ReaderAction.Read, data, data_len, actually)
+        return actually == data_len
+    else:
+        return false
+
+proc close*(self: var CborReader) =
+    ## Closes the underlying stream and shuts down the actuator.
+    var unused: int
+    self.actuator(ReaderAction.Close, nil, 0, unused)
+    self.actuator = nil
 
 # Informational functions.
 # =======================================================================
