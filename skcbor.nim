@@ -4,7 +4,7 @@
 # TODO static assert that we are on little endian
 
 type
-    FieldMajorKind* = enum
+    FieldMajorKind* {.pure.} = enum
         PositiveInteger
         NegativeInteger
         ByteString
@@ -14,7 +14,7 @@ type
         SemanticTag
         Primitive
 
-    PrimitiveKind* = enum
+    PrimitiveKind* {.pure.} = enum
         SimpleValueTiny ## 0-23
         SimpleValueByte ## 0-255
         Single          ## float16
@@ -22,21 +22,30 @@ type
         Double          ## float64
         Break           ## To escape arrays and maps of indefinite length.
 
-    SimpleValueKind* = enum
+    SimpleValueKind* {.pure.} = enum
         False     ## Boolean false; represented by the number 20.
         True      ## Boolean true; represented by the number 21.
         Null      ## Explicitly no data; represented by the number 22.
         Undefined ## Implicity no data; represented by the number 23.
 
-    WriterAction* = enum
-        ActionClose
-        ActionWrite
-        ActionFlush
+    WriterAction* {.pure.} = enum
+        Close
+        Write
+        Flush
 
     WriterActuator* = proc(action: WriterAction; data: pointer; data_len: int) {.closure.}
 
+    ReaderAction* {.pure.} = enum
+        Close
+        Read
+
+    ReaderActuator* = proc(action: WriterAction; data: pointer; data_len: int; written_len: var int) {.closure.}
+
     CborWriter* = object
         actuator*: WriterActuator
+
+    CborReader* = object
+        actuator*: ReaderActuator
 
 # These just commad and control the writer object, which pawns all the
 # work off on a closure.
@@ -45,11 +54,11 @@ type
 proc put*(self: var CborWriter; data: pointer; data_len: int) {.inline.} =
     ## Writes raw bytes to the writer's output stream.
     if self.actuator != nil:
-        self.actuator(ActionWrite, data, data_len)
+        self.actuator(WriterAction.Write, data, data_len)
 
 proc close*(self: var CborWriter) =
     ## Closes the underlying stream and shuts down the actuator.
-    self.actuator(ActionClose, nil, 0)
+    self.actuator(WriterAction.Close, nil, 0)
     self.actuator = nil
 
 proc flush*(self: var CborWriter) =
@@ -57,21 +66,27 @@ proc flush*(self: var CborWriter) =
     ## behind it. What this actually means is highly dependent on the actuator;
     ## it may very well do nothing at all.
     if self.actuator != nil:
-        self.actuator(ActionFlush, nil, 0)
+        self.actuator(WriterAction.Flush, nil, 0)
 
-proc encode_field_heading*(major, additional: int): uint8 =
-    ## Low-level routine to pack a major and additional type.
-    assert major <= 7
-    assert additional <= 31
-    result = ((major shl 5) + additional).uint8
+# Informational functions.
+# =======================================================================
 
-proc measure_integer_for_heading(i: uint64): int =
+proc measure_integer_for_heading*(i: uint64): int =
     ## Counts how many bytes in addition to the field heading are required to store a number.
     if i < 24: return 0
     if i <= uint8.high: return 1
     if i <= uint16.high: return 2
     if i <= uint32.high: return 4
     if i <= uint64.high: return 8
+
+# Header generation.
+# =======================================================================
+
+proc encode_field_heading*(major, additional: int): uint8 =
+    ## Low-level routine to pack a major and additional type.
+    assert major <= 7
+    assert additional <= 31
+    result = ((major shl 5) + additional).uint8
 
 proc encode_field_heading*(
     major: FieldMajorKind;
@@ -139,7 +154,6 @@ proc decode_field_heading*(heading: uint8): (int, int) =
     major = (heading.int shr 5) and 0x07
 
     return (major, additional)
-
 
 # These writers do actual work.
 # =======================================================================
