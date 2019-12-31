@@ -581,3 +581,7 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
     if result:
         reader.header = 0'u8
 
+when is_main_module:
+    var tests = 0
+    echo("TAP version 13")
+    echo("1..", tests)
