@@ -170,6 +170,21 @@ proc flush*(self: var CborWriter) =
     if self.actuator != nil:
         self.actuator(WriterAction.Flush, nil, 0)
 
+# Opens a CBOR writer to do fancy things.
+# =======================================================================
+
+proc open_to_buffer*(self: var CborWriter; buffer: var seq[uint8]) =
+    ## Opens the CBOR writer and configures it to append incoming
+    ## data to the end of the provided buffer.
+    self.actuator = proc(action: WriterAction; data: pointer; data_len: int) =
+        case action
+        of WriterAction.Write:
+            let x = buffer.len
+            set_len(buffer, len(buffer) + data_len)
+            copymem(addr buffer[x], data, data_len)
+        of WriterAction.Flush: discard
+        of WriterAction.Close: discard
+
 # These just command and control the reader object, which pawns all the
 # work off on a closure.
 # =======================================================================
