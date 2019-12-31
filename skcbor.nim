@@ -192,7 +192,7 @@ proc open_to_buffer*(self: var CborReader; buffer: ref seq[uint8]) =
     self.actuator = proc(action: ReaderAction; data: pointer; data_len: int; read_len: var int) =
         case action
         of ReaderAction.Read:
-            if likely((pos + data_len) <= len(buffer)):
+            if likely((pos + data_len) <= len(buffer[])):
                 copymem(data, addr buffer[][pos], data_len)
                 inc pos, data_len
                 read_len = data_len
@@ -470,7 +470,7 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
 
     zeromem(addr value.data[0], value.data.sizeof)
 
-    proc inner(): bool {.inline.} =
+    proc inner(reader: var CborReader; value: var BoxedValue): bool {.inline.} =
         let frags = decode_field_heading(reader.header)
         case frags[0]
         of ord(PositiveInteger):
@@ -562,11 +562,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
                 case frags[1]:
                 of ord(False):
                     value.kind3 = False
-                of ord(True):
+                of ord(True) + 20:
                     value.kind3 = True
-                of ord(Null):
+                of ord(Null) + 20:
                     value.kind3 = Null
-                of ord(Undefined):
+                of ord(Undefined) + 20:
                     value.kind3 = Undefined
                 else:
                     raise new_exception(ValueError, EINVALID_TYPE)
@@ -592,7 +592,7 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             raise new_exception(ValueError, EINVALID_TYPE)
 
     # run interior logic and reset header byte if successful
-    result = inner()
+    result = inner(reader, value)
     if result:
         reader.header = 0'u8
 
@@ -609,6 +609,9 @@ when is_main_module:
     open_to_buffer(reader, buffer)
 
     write_nil(writer)
-    let x = try_read(
+    echo(buffer[])
+
+    let x = try_read(reader, box)
+    echo(box)
 
     echo("1..", tests)
