@@ -173,17 +173,32 @@ proc flush*(self: var CborWriter) =
 # Opens a CBOR writer to do fancy things.
 # =======================================================================
 
-proc open_to_buffer*(self: var CborWriter; buffer: var seq[uint8]) =
+proc open_to_buffer*(self: var CborWriter; buffer: ref seq[uint8]) =
     ## Opens the CBOR writer and configures it to append incoming
     ## data to the end of the provided buffer.
     self.actuator = proc(action: WriterAction; data: pointer; data_len: int) =
         case action
         of WriterAction.Write:
-            let x = buffer.len
-            set_len(buffer, len(buffer) + data_len)
-            copymem(addr buffer[x], data, data_len)
+            let x = buffer[].len
+            set_len(buffer[], len(buffer[]) + data_len)
+            copymem(addr buffer[][x], data, data_len)
         of WriterAction.Flush: discard
         of WriterAction.Close: discard
+
+proc open_to_buffer*(self: var CborReader; buffer: ref seq[uint8]) =
+    ## Opens the CBOR reader and configures it to pull data from the
+    ## provided buffer.
+    var pos = 0
+    self.actuator = proc(action: ReaderAction; data: pointer; data_len: int; read_len: var int) =
+        case action
+        of ReaderAction.Read:
+            if likely((pos + data_len) <= len(buffer)):
+                copymem(data, addr buffer[][pos], data_len)
+                inc pos, data_len
+                read_len = data_len
+            else:
+                read_len = 0
+        of ReaderAction.Close: discard
 
 # These just command and control the reader object, which pawns all the
 # work off on a closure.
@@ -584,4 +599,16 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
 when is_main_module:
     var tests = 0
     echo("TAP version 13")
+
+    var buffer: ref seq[uint8]
+    var writer: CborWriter
+    var reader: CborReader
+    var box: BoxedValue
+    new(buffer)
+    open_to_buffer(writer, buffer)
+    open_to_buffer(reader, buffer)
+
+    write_nil(writer)
+    let x = try_read(
+
     echo("1..", tests)
