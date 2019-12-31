@@ -1,7 +1,12 @@
 
 # TODO handle semantic tags properly
-# TODO check what endian-ness is required for proper CBOR
+# TODO add code to twist numbers to big-endian
 # TODO static assert that we are on little endian
+
+const
+    EUNKNOWN_FIELD_LENGTH = "Field has an unrecognized length marker"
+    EINVALID_TYPE = "Message contained an invalid type"
+    ENO_SINGLES = "16-bit floating point messages are not (yet) supported"
 
 type
     FieldMajorKind* {.pure.} = enum
@@ -49,9 +54,12 @@ type
         kind2*: PrimitiveKind
         kind3*: SimpleValueKind
         data*: array[8, uint8]
+        sdata*: string
+        bdata*: seq[uint8]
 
     CborReader* = object
         actuator*: ReaderActuator
+        header*: uint8
 
 # Deals with boxed values.
 # =======================================================================
@@ -401,4 +409,160 @@ proc write*(writer: var CborWriter; value: int32) {.inline.} =
 proc write*(writer: var CborWriter; value: int) {.inline.} =
     ## Generic writer. Converts `value` to the largest int type and writes it.
     write(writer, value.uint64)
+
+# Hypest literacy action.
+# =======================================================================
+
+proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
+    ## Attempts to read either an immediate value or a marker for a
+    ## complicated value. An immediate value is one such as a boolean,
+    ## a string or an integer, which can be read in to a small struct and
+    ## returned as a boxed value.
+    ## 
+    ## A complicated value is an array or a map. Those contain multiple other
+    ## values which might also be complicated values, and as such can only
+    ## be parsed as a stream of events (SAX style) or to some form of tree.
+    ## This function is too low of a level to make storage decisions like this
+    ## for you so we choose to output the data as boxed value representing
+    ## the heading of this event.
+    ##
+    ## Does not attempt to enforce any security policy such as ignoring data
+    ## of particular sizes. Binary or text strings will be loaded in full.
+    if reader.header == 0:
+        # we have not read a header byte yet, so lets try that
+        let all_is_well = reader.get(addr reader.header, 1)
+        if not all_is_well:
+            return false
+    else:
+        # we previously failed to read a value; the header byte
+        # remains set. so we will try to read that value again
+        discard
+
+    zeromem(addr value.data[0], value.data.sizeof)
+
+    proc inner(): bool {.inline.} =
+        let frags = decode_field_heading(reader.header)
+        case frags[0]
+        of ord(PositiveInteger):
+            value.kind = PositiveInteger
+            case frags[1]:
+            of 0..23:
+                value.data[0] = frags[1].uint8
+                return true
+            of 24: return reader.get(addr value.data[0], 1)
+            of 25: return reader.get(addr value.data[0], 2)
+            of 26: return reader.get(addr value.data[0], 4)
+            of 27: return reader.get(addr value.data[0], 8)
+            else:
+                raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
+        of ord(NegativeInteger):
+            value.kind = NegativeInteger
+            case frags[1]:
+            of 0..23:
+                value.data[0] = frags[1].uint8
+                return true
+            of 24: return reader.get(addr value.data[0], 1)
+            of 25: return reader.get(addr value.data[0], 2)
+            of 26: return reader.get(addr value.data[0], 4)
+            of 27: return reader.get(addr value.data[0], 8)
+            else:
+                raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
+        of ord(ByteString):
+            value.kind = ByteString
+            case frags[1]:
+            of 0..23:
+                value.data[0] = frags[1].uint8
+                return true
+            of 24: return reader.get(addr value.data[0], 1)
+            of 25: return reader.get(addr value.data[0], 2)
+            of 26: return reader.get(addr value.data[0], 4)
+            of 27: return reader.get(addr value.data[0], 8)
+            else:
+                raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
+            let length = cast[ptr uint64](addr value.data[0])[].int
+            set_len(value.sdata, length)
+            return reader.get(addr value.sdata[0], length)
+        of ord(TextString):
+            value.kind = TextString
+            case frags[1]:
+            of 0..23:
+                value.data[0] = frags[1].uint8
+                return true
+            of 24: return reader.get(addr value.data[0], 1)
+            of 25: return reader.get(addr value.data[0], 2)
+            of 26: return reader.get(addr value.data[0], 4)
+            of 27: return reader.get(addr value.data[0], 8)
+            else:
+                raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
+            let length = cast[ptr uint64](addr value.data[0])[].int
+            set_len(value.bdata, length)
+            return reader.get(addr value.bdata[0], length)
+        of ord(Array):
+            value.kind = Array
+            case frags[1]:
+            of 0..23:
+                value.data[0] = frags[1].uint8
+                return true
+            of 24: return reader.get(addr value.data[0], 1)
+            of 25: return reader.get(addr value.data[0], 2)
+            of 26: return reader.get(addr value.data[0], 4)
+            of 27: return reader.get(addr value.data[0], 8)
+            else:
+                raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
+        of ord(Map):
+            value.kind = Map
+            case frags[1]:
+            of 0..23:
+                value.data[0] = frags[1].uint8
+                return true
+            of 24: return reader.get(addr value.data[0], 1)
+            of 25: return reader.get(addr value.data[0], 2)
+            of 26: return reader.get(addr value.data[0], 4)
+            of 27: return reader.get(addr value.data[0], 8)
+            else:
+                raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
+        of ord(SemanticTag):
+            # TODO should actually interpret the semtag
+            return try_read(reader, value)
+        of ord(Primitive):
+            value.kind = Primitive
+            case frags[1]
+            of 0..23:
+                value.kind2 = SimpleValueTiny
+                case frags[1]:
+                of ord(False):
+                    value.kind3 = False
+                of ord(True):
+                    value.kind3 = True
+                of ord(Null):
+                    value.kind3 = Null
+                of ord(Undefined):
+                    value.kind3 = Undefined
+                else:
+                    raise new_exception(ValueError, EINVALID_TYPE)
+                return true
+            of ord(SimpleValueByte) + 23:
+                value.kind2 = SimpleValueByte
+                return reader.get(addr value.data[0], 1)
+            of ord(Single) + 23:
+                value.kind2 = Single
+                raise new_exception(ValueError, ENO_SINGLES)
+            of ord(Float) + 23:
+                value.kind2 = Float
+                return reader.get(addr value.data[0], 4)
+            of ord(Double) + 23:
+                value.kind2 = Double
+                return reader.get(addr value.data[0], 8)
+            of ord(Break) + 23:
+                value.kind2 = Break
+                return true
+            else:
+                raise new_exception(ValueError, EINVALID_TYPE)
+        else:
+            raise new_exception(ValueError, EINVALID_TYPE)
+
+    # run interior logic and reset header byte if successful
+    result = inner()
+    if result:
+        reader.header = 0'u8
 
