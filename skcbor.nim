@@ -1,7 +1,9 @@
 
 # TODO handle semantic tags properly
 # TODO add code to twist numbers to big-endian
-# TODO static assert that we are on little endian
+
+static:
+    assert cpu_endian == little_endian
 
 const
     EUNKNOWN_FIELD_LENGTH = "Field has an unrecognized length marker"
@@ -448,7 +450,7 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
     ## complicated value. An immediate value is one such as a boolean,
     ## a string or an integer, which can be read in to a small struct and
     ## returned as a boxed value.
-    ## 
+    ##
     ## A complicated value is an array or a map. Those contain multiple other
     ## values which might also be complicated values, and as such can only
     ## be parsed as a stream of events (SAX style) or to some form of tree.
