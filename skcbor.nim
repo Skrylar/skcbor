@@ -319,6 +319,37 @@ proc decode_field_heading*(heading: uint8): (int, int) =
 # These writers do actual work.
 # =======================================================================
 
+proc write_raw*(writer: var CborWriter; value: uint64) =
+    var x: array[8, uint8]
+    big_endian64(addr x, unsafeAddr value)
+    let y = measure_integer_for_heading(value)
+    case y
+    of 1:
+        put(writer, addr x[7], 1)
+    of 2:
+        put(writer, addr x[6], 2)
+    of 4:
+        put(writer, addr x[4], 4)
+    of 8:
+        put(writer, addr x, 8)
+    else:
+        raise new_exception(ValueError, "Unknown integer size")
+
+proc write_raw*(writer: var CborWriter; value: uint64; len: int) =
+    var x: array[8, uint8]
+    big_endian64(addr x, unsafeAddr value)
+    case len
+    of 1:
+        put(writer, addr x[7], 1)
+    of 2:
+        put(writer, addr x[6], 2)
+    of 4:
+        put(writer, addr x[4], 4)
+    of 8:
+        put(writer, addr x, 8)
+    else:
+        raise new_exception(ValueError, "Unknown integer size")
+
 proc write*(writer: var CborWriter; value: bool) =
     var header: uint8 = if value:
         encode_field_heading(7, 21)
@@ -343,20 +374,23 @@ proc write_break*(writer: var CborWriter) =
 
 proc write*(writer: var CborWriter; value: float32) =
     var header: uint8 = encode_field_heading(7, 26)
+    var x: float32
+    big_endian32(addr x, unsafeAddr value)
     put(writer, addr header, 1)
-    put(writer, unsafeAddr value, value.sizeof)
+    put(writer, unsafeAddr x, value.sizeof)
 
 proc write*(writer: var CborWriter; value: float64) =
     var header: uint8 = encode_field_heading(7, 27)
+    var x: float64
+    big_endian64(addr x, unsafeAddr value)
     put(writer, addr header, 1)
-    put(writer, unsafeAddr value, value.sizeof)
+    put(writer, unsafeAddr x, value.sizeof)
 
 proc write*(writer: var CborWriter; value: uint64) =
     var write_len: int
     var header = encode_field_heading(PositiveInteger, value, write_len)
     put(writer, addr header, 1)
-    if write_len > 0:
-        put(writer, unsafeAddr value, write_len)
+    write_raw(writer, valu, write_lene)
 
 proc write*(writer: var CborWriter; value: int64) =
     if value >= 0:
@@ -366,8 +400,7 @@ proc write*(writer: var CborWriter; value: int64) =
         var write_len: int
         var header = encode_field_heading(NegativeInteger, mvalue, write_len)
         put(writer, addr header, 1)
-        if write_len > 0:
-            put(writer, addr mvalue, write_len)
+        write_raw(writer, mvalue, write_len)
 
 proc write*(writer: var CborWriter; value: string) =
     var write_len: int
@@ -394,7 +427,7 @@ proc write_array_header*(writer: var CborWriter; length: uint64; unknown_length:
     var header = encode_field_heading(Array, length,  length_bytes,unknown_length)
     put(writer, addr header, 1)
     if length_bytes > 0:
-        write(writer, length)
+        write_raw(writer, length)
 
 proc write*[T](writer: var CborWriter; thing: openarray[T]) =
     write_array_header(writer, thing.len, false)
@@ -408,7 +441,7 @@ proc write_map_header*(writer: var CborWriter; length: uint64; unknown_length: b
     var header = encode_field_heading(Map, length, length_bytes, unknown_length)
     put(writer, addr header, 1)
     if length_bytes > 0:
-        write(writer, length)
+        write_raw(writer, length)
 
 # These writers just turn around and call the correct writer for their
 # type.
