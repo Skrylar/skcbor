@@ -516,11 +516,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             value.kind = PositiveInteger
             case frags[1]:
             of 0..23:
-                value.data[0] = frags[1].uint8
+                value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[0], 1)
-            of 25: return reader.get(addr value.data[0], 2)
-            of 26: return reader.get(addr value.data[0], 4)
+            of 24: return reader.get(addr value.data[7], 1)
+            of 25: return reader.get(addr value.data[6], 2)
+            of 26: return reader.get(addr value.data[4], 4)
             of 27: return reader.get(addr value.data[0], 8)
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
@@ -528,11 +528,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             value.kind = NegativeInteger
             case frags[1]:
             of 0..23:
-                value.data[0] = frags[1].uint8
+                value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[0], 1)
-            of 25: return reader.get(addr value.data[0], 2)
-            of 26: return reader.get(addr value.data[0], 4)
+            of 24: return reader.get(addr value.data[7], 1)
+            of 25: return reader.get(addr value.data[6], 2)
+            of 26: return reader.get(addr value.data[4], 4)
             of 27: return reader.get(addr value.data[0], 8)
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
@@ -540,11 +540,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             value.kind = ByteString
             case frags[1]:
             of 0..23:
-                value.data[0] = frags[1].uint8
+                value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[0], 1)
-            of 25: return reader.get(addr value.data[0], 2)
-            of 26: return reader.get(addr value.data[0], 4)
+            of 24: return reader.get(addr value.data[7], 1)
+            of 25: return reader.get(addr value.data[6], 2)
+            of 26: return reader.get(addr value.data[4], 4)
             of 27: return reader.get(addr value.data[0], 8)
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
@@ -555,11 +555,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             value.kind = TextString
             case frags[1]:
             of 0..23:
-                value.data[0] = frags[1].uint8
+                value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[0], 1)
-            of 25: return reader.get(addr value.data[0], 2)
-            of 26: return reader.get(addr value.data[0], 4)
+            of 24: return reader.get(addr value.data[7], 1)
+            of 25: return reader.get(addr value.data[6], 2)
+            of 26: return reader.get(addr value.data[4], 4)
             of 27: return reader.get(addr value.data[0], 8)
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
@@ -570,11 +570,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             value.kind = Array
             case frags[1]:
             of 0..23:
-                value.data[0] = frags[1].uint8
+                value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[0], 1)
-            of 25: return reader.get(addr value.data[0], 2)
-            of 26: return reader.get(addr value.data[0], 4)
+            of 24: return reader.get(addr value.data[7], 1)
+            of 25: return reader.get(addr value.data[6], 2)
+            of 26: return reader.get(addr value.data[4], 4)
             of 27: return reader.get(addr value.data[0], 8)
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
@@ -582,11 +582,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             value.kind = Map
             case frags[1]:
             of 0..23:
-                value.data[0] = frags[1].uint8
+                value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[0], 1)
-            of 25: return reader.get(addr value.data[0], 2)
-            of 26: return reader.get(addr value.data[0], 4)
+            of 24: return reader.get(addr value.data[7], 1)
+            of 25: return reader.get(addr value.data[6], 2)
+            of 26: return reader.get(addr value.data[4], 4)
             of 27: return reader.get(addr value.data[0], 8)
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
@@ -612,13 +612,13 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
                 return true
             of ord(SimpleValueByte) + 23:
                 value.kind2 = SimpleValueByte
-                return reader.get(addr value.data[0], 1)
+                return reader.get(addr value.data[7], 1)
             of ord(Single) + 23:
                 value.kind2 = Single
                 raise new_exception(ValueError, ENO_SINGLES)
             of ord(Float) + 23:
                 value.kind2 = Float
-                return reader.get(addr value.data[0], 4)
+                return reader.get(addr value.data[4], 4)
             of ord(Double) + 23:
                 value.kind2 = Double
                 return reader.get(addr value.data[0], 8)
@@ -633,6 +633,10 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
     # run interior logic and reset header byte if successful
     result = inner(reader, value)
     if result:
+        when cpu_endian == little_endian:
+            var buffer: array[8, uint8]
+            copymem(addr buffer[0], addr value.data[0], 8)
+            swap_endian64(addr value.data[0], addr buffer[0])
         reader.header = 0'u8
 
 when is_main_module:
