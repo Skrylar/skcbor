@@ -2,6 +2,8 @@
 # TODO handle semantic tags properly
 # TODO add code to twist numbers to big-endian
 
+import endians
+
 static:
     assert cpu_endian == little_endian
 
@@ -317,22 +319,6 @@ proc decode_field_heading*(heading: uint8): (int, int) =
 # These writers do actual work.
 # =======================================================================
 
-proc write*(writer: var CborWriter; value: string) =
-    var write_len: int
-    var header = encode_field_heading(TextString, value.len.uint64, write_len)
-    put(writer, addr header, 1)
-    if write_len > 0:
-        put(writer, unsafeAddr value, write_len)
-    put(writer, unsafeAddr value[0], value.len)
-
-proc write*(writer: var CborWriter; value: openarray[uint8]) =
-    var write_len: int
-    var header = encode_field_heading(ByteString, value.len.uint64, write_len)
-    put(writer, addr header, 1)
-    if write_len > 0:
-        put(writer, unsafeAddr value, write_len)
-    put(writer, unsafeAddr value[0], value.len)
-
 proc write*(writer: var CborWriter; value: bool) =
     var header: uint8 = if value:
         encode_field_heading(7, 21)
@@ -382,6 +368,24 @@ proc write*(writer: var CborWriter; value: int64) =
         put(writer, addr header, 1)
         if write_len > 0:
             put(writer, addr mvalue, write_len)
+
+proc write*(writer: var CborWriter; value: string) =
+    var write_len: int
+    var header = encode_field_heading(TextString, value.len.uint64, write_len)
+    put(writer, addr header, 1)
+    if write_len > 0:
+        var x = len(value).uint64
+        write(writer, x)
+    put(writer, unsafeAddr value[0], value.len)
+
+proc write*(writer: var CborWriter; value: openarray[uint8]) =
+    var write_len: int
+    var header = encode_field_heading(ByteString, value.len.uint64, write_len)
+    put(writer, addr header, 1)
+    if write_len > 0:
+        var x = len(value).uint64
+        write(writer, x)
+    put(writer, unsafeAddr value[0], value.len)
 
 proc write_array_header*(writer: var CborWriter; length: uint64; unknown_length: bool = false) =
     ## Writes a header for an array; used when manually writing the data type to a stream.
