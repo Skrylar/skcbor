@@ -390,7 +390,7 @@ proc write*(writer: var CborWriter; value: uint64) =
     var write_len: int
     var header = encode_field_heading(PositiveInteger, value, write_len)
     put(writer, addr header, 1)
-    write_raw(writer, valu, write_lene)
+    write_raw(writer, value, write_len)
 
 proc write*(writer: var CborWriter; value: int64) =
     if value >= 0:
