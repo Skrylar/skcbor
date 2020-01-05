@@ -1,11 +1,7 @@
 
 # TODO handle semantic tags properly
-# TODO add code to twist numbers to big-endian
 
 import endians
-
-static:
-    assert cpu_endian == little_endian
 
 const
     EUNKNOWN_FIELD_LENGTH = "Field has an unrecognized length marker"
