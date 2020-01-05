@@ -153,6 +153,17 @@ proc unbox*(self: BoxedValue; value: var int64; default: int64; lossy: bool): bo
         value = default
         result = false
 
+proc unbox*(self: BoxedValue; value: var string; default: string = ""; lossy: bool = false): bool {.discardable.} =
+    if self.kind == TextString:
+        set_len(value, self.sdata.len)
+        if self.sdata.len > 0:
+            copymem(addr value[0], unsafeAddr self.sdata[0], self.sdata.len)
+    else:
+        set_len(value, len(default))
+        if default.len > 0:
+            copymem(addr value[0], unsafeAddr default[0], len(default))
+        result = false
+
 # These just commad and control the writer object, which pawns all the
 # work off on a closure.
 # =======================================================================
@@ -542,30 +553,46 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             of 0..23:
                 value.data[7] = frags[1].uint8
                 return true
-            of 24: return reader.get(addr value.data[7], 1)
-            of 25: return reader.get(addr value.data[6], 2)
-            of 26: return reader.get(addr value.data[4], 4)
-            of 27: return reader.get(addr value.data[0], 8)
+            of 24:
+                if not reader.get(addr value.data[7], 1): return false
+            of 25:
+                if not reader.get(addr value.data[6], 2): return false
+            of 26:
+                if not reader.get(addr value.data[4], 4): return false
+            of 27:
+                if not reader.get(addr value.data[0], 8): return false
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
-            let length = cast[ptr uint64](addr value.data[0])[].int
+            var length: uint64
+            when cpu_endian == little_endian:
+                little_endian64(addr length, addr value.data[0])
+            else:
+                big_endian64(addr length, addr value.data[0])
             set_len(value.sdata, length)
-            return reader.get(addr value.sdata[0], length)
+            if length > 0'u64:
+                return reader.get(addr value.bdata[0], length.int)
         of ord(TextString):
             value.kind = TextString
             case frags[1]:
-            of 0..23:
-                value.data[7] = frags[1].uint8
-                return true
-            of 24: return reader.get(addr value.data[7], 1)
-            of 25: return reader.get(addr value.data[6], 2)
-            of 26: return reader.get(addr value.data[4], 4)
-            of 27: return reader.get(addr value.data[0], 8)
+            of 0..23: value.data[7] = frags[1].uint8
+            of 24:
+                if not reader.get(addr value.data[7], 1): return false
+            of 25:
+                if not reader.get(addr value.data[6], 2): return false
+            of 26:
+                if not reader.get(addr value.data[4], 4): return false
+            of 27:
+                if not reader.get(addr value.data[0], 8): return false
             else:
                 raise new_exception(ValueError, EUNKNOWN_FIELD_LENGTH)
-            let length = cast[ptr uint64](addr value.data[0])[].int
-            set_len(value.bdata, length)
-            return reader.get(addr value.bdata[0], length)
+            var length: uint64
+            when cpu_endian == little_endian:
+                swap_endian64(addr length, addr value.data[0])
+            else:
+                big_endian64(addr length, addr value.data[0])
+            set_len(value.sdata, length)
+            if length > 0'u64:
+                return reader.get(addr value.sdata[0], length.int)
         of ord(Array):
             value.kind = Array
             case frags[1]:
@@ -599,7 +626,7 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
             of 0..23:
                 value.kind2 = SimpleValueTiny
                 case frags[1]:
-                of ord(False):
+                of ord(False) + 20:
                     value.kind3 = False
                 of ord(True) + 20:
                     value.kind3 = True
@@ -633,15 +660,26 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
     # run interior logic and reset header byte if successful
     result = inner(reader, value)
     if result:
-        when cpu_endian == little_endian:
-            var buffer: array[8, uint8]
-            copymem(addr buffer[0], addr value.data[0], 8)
-            swap_endian64(addr value.data[0], addr buffer[0])
+        case value.kind:
+        of TextString, ByteString:
+            discard
+        else:
+            when cpu_endian == little_endian:
+                var buffer: array[8, uint8]
+                copymem(addr buffer[0], addr value.data[0], 8)
+                swap_endian64(addr value.data[0], addr buffer[0])
         reader.header = 0'u8
 
 when is_main_module:
     var tests = 0
     echo("TAP version 13")
+
+    proc ok(condition: bool) =
+        inc tests
+        if condition:
+            echo("ok ", tests)
+        else:
+            echo("not ok ", tests)
 
     var buffer: ref seq[uint8]
     var writer: CborWriter
@@ -652,9 +690,27 @@ when is_main_module:
     open_to_buffer(reader, buffer)
 
     write_nil(writer)
-    echo(buffer[])
+    write(writer, false)
+    write(writer, 500)
+    write(writer, "i am soup")
 
     let x = try_read(reader, box)
-    echo(box)
+    ok(box.kind == Primitive)
+    ok(box.kind2 == SimpleValueTiny)
+    ok(box.kind3 == Null)
+
+    let y = try_read(reader, box)
+    ok(box.kind == Primitive)
+    ok(box.kind2 == SimpleValueTiny)
+    ok(box.kind3 == False)
+
+    let z = try_read(reader, box)
+    ok(box.kind == PositiveInteger)
+
+    let w = try_read(reader, box)
+    var sdata: string
+    ok(box.kind == TextString)
+    unbox(box, sdata)
+    ok(sdata == "i am soup")
 
     echo("1..", tests)
