@@ -1,5 +1,6 @@
 
 # TODO handle semantic tags properly
+# TODO handle running out of bytes after starting header but not yet reading length block
 
 import endians
 
@@ -436,7 +437,7 @@ proc write_array_header*(writer: var CborWriter; length: uint64; unknown_length:
     if length_bytes > 0:
         write_raw(writer, length)
 
-proc write*[T](writer: var CborWriter; thing: openarray[T]) =
+template write*[T](writer: var CborWriter; thing: openarray[T]) =
     write_array_header(writer, thing.len, false)
     for x in thing:
         write(x)
