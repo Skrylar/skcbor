@@ -679,6 +679,11 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
 
     clear(reader)
 
+proc reset*(reader: var CborReader) =
+    ## Resets internal state of the reader but leaves the actuator alone.
+    reader.header = 0
+    reader.length = 0
+
 iterator values*(reader: var CborReader; box: var BoxedValue): bool =
     ## Repeatedly reads values in to the supplied box, until the
     ## reader stops for some reason.
