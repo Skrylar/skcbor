@@ -63,6 +63,21 @@ type
         header*: uint8
         length*: int64
 
+    CborSaxReader* = object
+        on_boolean*          : proc (semtag: int64; value: bool) {.closure.}
+        on_nil*              : proc (semtag: int64) {.closure.}
+        on_positive_integer* : proc (semtag: int64; box: BoxedValue) {.closure.}
+        on_negative_integer* : proc (semtag: int64; box: BoxedValue) {.closure.}
+        on_undefined*        : proc (semtag: int64) {.closure.}
+        on_string_text*      : proc (semtag: int64; box: BoxedValue) {.closure.}
+        on_string_binary*    : proc (semtag: int64; box: BoxedValue) {.closure.}
+        on_float32*          : proc (semtag: int64; box: BoxedValue) {.closure.}
+        on_float64*          : proc (semtag: int64; box: BoxedValue) {.closure.}
+        on_map_start*        : proc (semtag: int64; size: int) {.closure.}
+        on_map_end*          : proc () {.closure.}
+        on_array_start*      : proc (semtag: int64; size: int) {.closure.}
+        on_array_end*        : proc () {.closure.}
+
 # Deals with boxed values.
 # =======================================================================
 
@@ -669,6 +684,31 @@ iterator values*(reader: var CborReader; box: var BoxedValue): bool =
     ## reader stops for some reason.
     while try_read(reader, box) == true:
         yield true
+
+proc read*(reader: var CborReader; sax: CborSaxReader) =
+    var box: BoxedValue
+    for x in values(reader, box):
+        case box.kind
+        of PositiveInteger: sax.on_positive_integer(0, box)
+        of NegativeInteger: sax.on_negative_integer(0, box)
+        of ByteString: sax.on_string_binary(0, box)
+        of TextString: sax.on_string_text(0, box)
+        of Primitive:
+            case box.kind2
+            of SimpleValueTiny:
+                case box.kind3:
+                of False: sax.on_boolean(0, false)
+                of True: sax.on_boolean(0, true)
+                of Null: sax.on_nil(0)
+                of Undefined: sax.on_undefined(0)
+            of SimpleValueByte: discard # TODO
+            of Single: discard # TODO
+            of Float: sax.on_float32(0, box)
+            of Double: sax.on_float64(0, box)
+            of Break: discard # TODO
+        of SemanticTag: discard # TODO
+        of Array: discard # TODO
+        of Map: discard # TODO
 
 when is_main_module:
     var tests = 0
