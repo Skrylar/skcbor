@@ -664,6 +664,12 @@ proc try_read*(reader: var CborReader; value: var BoxedValue): bool =
 
     clear(reader)
 
+iterator values*(reader: var CborReader; box: var BoxedValue): bool =
+    ## Repeatedly reads values in to the supplied box, until the
+    ## reader stops for some reason.
+    while try_read(reader, box) == true:
+        yield true
+
 when is_main_module:
     var tests = 0
     echo("TAP version 13")
