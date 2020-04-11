@@ -247,6 +247,19 @@ proc open_to_buffer*(self: var CborWriter; buffer: ref seq[uint8]) =
         of WriterAction.Flush: discard
         of WriterAction.Close: discard
 
+proc open_to_file*(self: var CborWriter; f: File) =
+    ## Opens the CBOR writer and configures it to append incoming
+    ## data to a file stream.
+    self.actuator = proc(action: WriterAction; data: pointer; data_len: int) =
+        case action
+        of WriterAction.Write:
+            # XXX how should we handle errors here?
+            discard f.writebuffer(data, data_len)
+        of WriterAction.Flush:
+            f.flushfile()
+        of WriterAction.Close:
+            f.close()
+
 proc open_to_buffer*(self: var CborReader; buffer: ref seq[uint8]) =
     ## Opens the CBOR reader and configures it to pull data from the
     ## provided buffer.
