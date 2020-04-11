@@ -382,7 +382,7 @@ proc write_raw*(writer: var CborWriter; value: uint64) =
     big_endian64(addr x, unsafeAddr value)
     let y = measure_integer_for_heading(value)
     case y
-    of 1:
+    of 0, 1:
         put(writer, addr x[7], 1)
     of 2:
         put(writer, addr x[6], 2)
@@ -397,7 +397,7 @@ proc write_raw*(writer: var CborWriter; value: uint64; len: int) =
     var x: array[8, uint8]
     big_endian64(addr x, unsafeAddr value)
     case len
-    of 1:
+    of 0, 1:
         put(writer, addr x[7], 1)
     of 2:
         put(writer, addr x[6], 2)
