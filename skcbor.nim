@@ -166,6 +166,40 @@ proc unbox*(self: BoxedValue; value: var int64; default: int64; lossy: bool): bo
         value = default
         result = false
 
+proc unbox*[T:int|int32|int16|int8](self: BoxedValue; value: var T; default: T; lossy: bool): bool {.discardable.} =
+    var holder: int64
+    if self.unbox(holder, default.int64, lossy):
+        if holder > T.high:
+            if lossy:
+                value = T.high
+                return true
+            else:
+                value = default
+                return false
+        else:
+            value = holder.T
+            return true
+    else:
+        value = default
+        return false
+
+proc unbox*[T:uint|uint32|uint16|uint8](self: BoxedValue; value: var T; default: T; lossy: bool): bool {.discardable.} =
+    var holder: int64
+    if self.unbox(holder, default.uint64, lossy):
+        if holder > T.high:
+            if lossy:
+                value = T.high
+                return true
+            else:
+                value = default
+                return false
+        else:
+            value = holder.T
+            return true
+    else:
+        value = default
+        return false
+
 proc unbox*(self: BoxedValue; value: var string; default: string = ""; lossy: bool = false): bool {.discardable.} =
     if self.kind == TextString:
         set_len(value, self.sdata.len)
