@@ -275,6 +275,16 @@ proc open_to_buffer*(self: var CborReader; buffer: ref seq[uint8]) =
                 read_len = 0
         of ReaderAction.Close: discard
 
+proc open_to_file*(self: var CborReader; f: File) =
+    ## Opens the CBOR reader and configures it to pull data from the
+    ## provided file.
+    self.actuator = proc(action: ReaderAction; data: pointer; data_len: int; read_len: var int) =
+        case action
+        of ReaderAction.Read:
+            read_len = f.readbuffer(data, data_len)
+        of ReaderAction.Close:
+            f.close()
+
 # These just command and control the reader object, which pawns all the
 # work off on a closure.
 # =======================================================================
