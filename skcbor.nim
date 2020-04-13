@@ -485,6 +485,14 @@ proc write*(writer: var CborWriter; value: int64) =
         put(writer, addr header, 1)
         write_raw(writer, mvalue, write_len)
 
+template write*[T:int|int8|int16|int32](writer: var CborWriter; value: T) =
+    ## Shim needed to prevent issues when writing fixed-size values.
+    writer.write(value.int64)
+
+template write*[T:uint|uint8|uint16|uint32](writer: var CborWriter; value: T) =
+    ## Shim needed to prevent issues when writing fixed-size values.
+    writer.write(value.uint64)
+
 proc write*(writer: var CborWriter; value: string) =
     var write_len: int
     var header = encode_field_heading(TextString, value.len.uint64, write_len)
