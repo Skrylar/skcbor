@@ -211,7 +211,7 @@ proc unbox*(self: BoxedValue; value: var string; default: string = ""; lossy: bo
             copymem(addr value[0], unsafeAddr default[0], len(default))
         result = false
 
-# These just commad and control the writer object, which pawns all the
+# These just command and control the writer object, which pawns all the
 # work off on a closure.
 # =======================================================================
 
