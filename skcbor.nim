@@ -88,7 +88,7 @@ proc unbox*(self: BoxedValue; value: var float64; default: float64; lossy: bool)
         case self.kind2:
         of Float:
             var x: float32
-            copymem(addr x, unsafeAddr self.data[0], float64.sizeof)
+            copymem(addr x, unsafeAddr self.data[0], float32.sizeof)
             value = x.float64
         of Double:
             copymem(addr value, unsafeAddr self.data[0], float64.sizeof)
