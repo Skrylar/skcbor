@@ -1,25 +1,3 @@
-  - [Measuring encoding length](#measuring-encoding-length)
-  - [Computing header bytes](#computing-header-bytes)
-  - [Boxed values](#boxed-values)
-  - [Writing](#writing)
-      - [Opening streams for writing](#opening-streams-for-writing)
-      - [Low-level stream commands](#low-level-stream-commands)
-      - [Writing special types](#writing-special-types)
-      - [Writing numbers](#writing-numbers)
-      - [Writing booleans](#writing-booleans)
-      - [Writing floating point
-        numbers](#writing-floating-point-numbers)
-      - [Writing parts of arrays](#writing-parts-of-arrays)
-      - [Writing parts of maps](#writing-parts-of-maps)
-      - [Writing strings and binary
-        blobs](#writing-strings-and-binary-blobs)
-      - [Writing arbitrary arrays](#writing-arbitrary-arrays)
-      - [Convenience procedures](#convenience-procedures)
-  - [Reading](#reading)
-      - [Managing a reader](#managing-a-reader)
-      - [Reading boxed values](#reading-boxed-values)
-  - [License](#license)
-
 SkCBOR provides stream writing and stream reading procedures that
 operate on the [Concise Binary Object Representation](https://cbor.io)
 format. It can be used to implement a SAX style parser which can in turn
@@ -107,12 +85,12 @@ supplied stream.
 
 These procedures are the public API which control a `CborWriter`.
 
-  - put
+  - put  
     Instructs the writer to stuff `data_len` number of bytes taken from
     the `data` buffer and store those in some way.
-  - close
+  - close  
     Instructs the writer to close the underlying stream.
-  - flush
+  - flush  
     Instructs the writer to flush any buffered changes to the underlying
     stream.
 
@@ -148,12 +126,12 @@ Mostly for internal use.
 
 Writes a special value to the CBOR stream.
 
-  - nil
+  - nil  
     An explicit nil/null value.
-  - undefined
+  - undefined  
     A value which is not defined; this is kind of like nil, but
     explicitly means the value was not set.
-  - break
+  - break  
     Breaks a sequence with an undefined length.
 
 ## Writing numbers
@@ -249,7 +227,7 @@ numeric type we can.
 A reader object holds state related to reading bytes which are then used
 to decode CBOR values.
 
-  - actuator
+  - actuator  
     A closure which handles retrieving bytes on behalf of decoding
     procedures.
 
