@@ -12,3 +12,6 @@ check:V: t/$module.t
 docs:V:
     pandoc docs/readme.md -t gfm > README.md
 
+push:V:
+    git push github
+
